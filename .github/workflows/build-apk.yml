@@ -46,30 +46,29 @@ jobs:
           cd android
           ./gradlew assembleRelease --no-daemon
 
-      - name: ✍️ Sign Release APK
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: android/app/build/outputs/apk/release
-          signingKey: ${{ secrets.SIGNING_KEY }}
-        continue-on-error: true
-
-      - name: ✍️ Fallback Auto-Sign (Debug Keystore)
+      - name: ✍️ Align and Sign APK (Scheme V2 + V3)
         run: |
-          # Generate a standard signing key and sign the release apk directly
-          keytool -genkeypair -v -keystore release.keystore -alias q-ilav -keyalg RSA -keysize 2048 -validity 10000 -storepass 123456 -keypass 123456 -dname "CN=qilav, OU=core, O=ilav, L=Hyd, ST=TG, C=IN"
+          # 1. Locate the unsigned release APK
+          RAW_APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
           
-          # Find the unsigned release apk
-          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          # 2. Find Android SDK build-tools path
+          BUILD_TOOLS_PATH=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
           
-          # Sign using jarsigner/apksigner
-          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore release.keystore -storepass 123456 $APK_PATH q-ilav
+          # 3. Align the APK
+          $BUILD_TOOLS_PATH/zipalign -v -p 4 $RAW_APK aligned.apk
           
-          mkdir -p output
-          cp $APK_PATH output/q-ilav-standalone.apk
+          # 4. Generate universal keystore
+          keytool -genkeypair -v -keystore test.keystore -alias testKey -keyalg RSA -keysize 2048 -validity 10000 -storepass password123 -keypass password123 -dname "CN=QILAV, OU=App, O=Org, C=IN"
+          
+          # 5. Sign with full modern Android Scheme V2/V3 compatibility
+          $BUILD_TOOLS_PATH/apksigner sign --ks test.keystore --ks-key-alias testKey --ks-pass pass:password123 --key-pass pass:password123 --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out q-ilav.apk aligned.apk
+          
+          # 6. Verify signature
+          $BUILD_TOOLS_PATH/apksigner verify --verbose q-ilav.apk
 
       - name: 📤 Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: q-ilav-standalone-apk
-          path: output/q-ilav-standalone.apk
+          name: q-ilav-app
+          path: q-ilav.apk
           retention-days: 7
