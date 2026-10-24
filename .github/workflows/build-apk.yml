@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build Android Release APK
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -41,14 +41,14 @@ jobs:
       - name: 🔨 Grant execute permissions for gradlew
         run: chmod +x android/gradlew
 
-      - name: 🚀 Build Android Release APK
+      - name: 🚀 Build Signed Android APK
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleDebug --no-daemon
 
       - name: 📤 Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: q-ilav-release-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          name: q-ilav-apk
+          path: android/app/build/outputs/apk/debug/*.apk
           retention-days: 7
