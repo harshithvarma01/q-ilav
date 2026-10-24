@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build Standalone APK
     runs-on: ubuntu-latest
 
     steps:
@@ -35,20 +35,41 @@ jobs:
           expo-version: latest
           packager: npm
 
-      - name: ⚙️ Generate Native Android Project (Expo Prebuild)
+      - name: ⚙️ Generate Native Android Project
         run: npx expo prebuild --platform android --clean
 
       - name: 🔨 Grant execute permissions for gradlew
         run: chmod +x android/gradlew
 
-      - name: 🚀 Build Signed Android APK
+      - name: 🚀 Build Standalone Release APK
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleRelease --no-daemon
+
+      - name: ✍️ Sign Release APK
+        uses: r0adkll/sign-android-release@v1
+        with:
+          releaseDirectory: android/app/build/outputs/apk/release
+          signingKey: ${{ secrets.SIGNING_KEY }}
+        continue-on-error: true
+
+      - name: ✍️ Fallback Auto-Sign (Debug Keystore)
+        run: |
+          # Generate a standard signing key and sign the release apk directly
+          keytool -genkeypair -v -keystore release.keystore -alias q-ilav -keyalg RSA -keysize 2048 -validity 10000 -storepass 123456 -keypass 123456 -dname "CN=qilav, OU=core, O=ilav, L=Hyd, ST=TG, C=IN"
+          
+          # Find the unsigned release apk
+          APK_PATH=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          
+          # Sign using jarsigner/apksigner
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore release.keystore -storepass 123456 $APK_PATH q-ilav
+          
+          mkdir -p output
+          cp $APK_PATH output/q-ilav-standalone.apk
 
       - name: 📤 Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: q-ilav-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: q-ilav-standalone-apk
+          path: output/q-ilav-standalone.apk
           retention-days: 7
